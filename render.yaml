@@ -21,24 +21,12 @@ services:
         value: true
       - key: ONLY_ANNOUNCE_ACTIVE_ITEMS
         value: true
+      - key: SHOW_ITEM_IMAGE
+        value: true
       - key: SYNC_LOOKBACK_SECONDS
         value: 5
       - key: STATE_DIR
         value: /var/data
-      - key: PUBLIC_WEBHOOK_URL
-        sync: false
-      - key: SQUARE_ACCESS_TOKEN
-        sync: false
-      - key: SQUARE_SIGNATURE_KEY
-        sync: false
-      - key: DISCORD_WEBHOOK_URL
-        sync: false
-      - key: ADMIN_TOKEN
-        sync: false
-      - key: CATEGORY_ID
-        sync: false
-      - key: ROLE_MENTION_ID
-        sync: false
     disk:
       name: square-discord-state
       mountPath: /var/data

@@ -65,6 +65,8 @@ npm start
 - If `CATEGORY_ID` is blank, the app tries to find the category by exact `CATEGORY_NAME` match.
 - `ANNOUNCE_ADDS` and `ANNOUNCE_UPDATES` can be set to `true` or `false`.
 - `ROLE_MENTION_ID` can be used to ping a Discord role.
+- `SHOW_ITEM_IMAGE=true` adds the first Square item image to the Discord embed when the item has an attached catalog image.
+- Item links use Square `item_data.ecom_uri` when Square returns it. Because Square marks that field as deprecated, set `STORE_SEARCH_URL` or `STORE_FALLBACK_URL` as a fallback.
 
 ## Security
 
@@ -82,7 +84,7 @@ A `render.yaml` file is included for Blueprint-style deployment. You still need 
 - `SQUARE_SIGNATURE_KEY`
 - `DISCORD_WEBHOOK_URL`
 - `ADMIN_TOKEN`
-- optionally `CATEGORY_ID` and `ROLE_MENTION_ID`
+- optionally `CATEGORY_ID`, `ROLE_MENTION_ID`, `SHOW_ITEM_IMAGE`, `STORE_SEARCH_URL`, and `STORE_FALLBACK_URL`
 
 After deployment, seed the catalog state once by making a protected POST request:
 

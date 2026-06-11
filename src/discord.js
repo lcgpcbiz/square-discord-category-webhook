@@ -1,5 +1,6 @@
 import { config } from './config.js';
 import { cheapestPriceText, itemUrl, skuText } from './catalogLogic.js';
+import { getFirstItemImageUrl } from './square.js';
 
 function discordColor(action) {
   return action === 'added' ? 0x2ecc71 : 0xf1c40f;
@@ -8,25 +9,31 @@ function discordColor(action) {
 export async function postDiscordItemNotice(item, action) {
   const name = item.item_data?.name || '(Unnamed Square item)';
   const url = itemUrl(item);
+  const imageUrl = config.showItemImage ? await getFirstItemImageUrl(item) : null;
   const roleMention = config.roleMentionId ? `<@&${config.roleMentionId}> ` : '';
 
+  const embed = {
+    title: name,
+    url: url || undefined,
+    description: url ? `[View item in the online store](${url})` : undefined,
+    color: discordColor(action),
+    fields: [
+      { name: 'Category', value: config.categoryName, inline: true },
+      { name: 'Starting price', value: cheapestPriceText(item), inline: true },
+      { name: 'SKU', value: skuText(item), inline: false }
+    ],
+    footer: { text: 'Lucky Cat Square Store' },
+    timestamp: new Date().toISOString()
+  };
+
+  if (imageUrl) {
+    embed.image = { url: imageUrl };
+  }
+
   const payload = {
-    content: `${roleMention}${action === 'added' ? 'New item added' : 'Item updated'} in **${config.categoryName}**`,
+    content: `${roleMention}${action === 'added' ? 'New item added' : 'Item updated'} in **${config.categoryName}**${url ? `\n${url}` : ''}`,
     allowed_mentions: config.roleMentionId ? { roles: [config.roleMentionId] } : { parse: [] },
-    embeds: [
-      {
-        title: name,
-        url: url || undefined,
-        color: discordColor(action),
-        fields: [
-          { name: 'Category', value: config.categoryName, inline: true },
-          { name: 'Starting price', value: cheapestPriceText(item), inline: true },
-          { name: 'SKU', value: skuText(item), inline: false }
-        ],
-        footer: { text: 'Lucky Cat Square Store' },
-        timestamp: new Date().toISOString()
-      }
-    ]
+    embeds: [embed]
   };
 
   await postDiscord(payload);

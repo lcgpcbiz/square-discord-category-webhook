@@ -1,3 +1,5 @@
+import { config } from './config.js';
+
 export function itemCategoryIds(item) {
   const data = item.item_data || {};
   const ids = new Set();
@@ -80,5 +82,51 @@ export function skuText(item) {
 
 export function itemUrl(item) {
   const data = item.item_data || {};
-  return data.ecom_uri || data.external_url || null;
+
+  // Square has historically returned ecom_uri for published Square Online products,
+  // but Square marks it as deprecated. Use it when present, then fall back below.
+  if (data.ecom_uri) return data.ecom_uri;
+  if (data.external_url) return data.external_url;
+
+  // If you provide a search page URL, link to a search for the item name.
+  // Example: STORE_SEARCH_URL=https://lctcg.com/s/search
+  if (config.storeSearchUrl) {
+    const separator = config.storeSearchUrl.includes('?') ? '&' : '?';
+    const name = data.name || '';
+    return `${config.storeSearchUrl}${separator}q=${encodeURIComponent(name)}`;
+  }
+
+  // Last resort: link to your store/category page.
+  if (config.storeFallbackUrl) return config.storeFallbackUrl;
+
+  return null;
+}
+
+export function itemImageIds(item) {
+  const ids = [];
+  const seen = new Set();
+
+  function add(id) {
+    if (!id || seen.has(id)) return;
+    seen.add(id);
+    ids.push(id);
+  }
+
+  for (const id of item.item_data?.image_ids || []) add(id);
+
+  for (const variation of item.item_data?.variations || []) {
+    for (const id of variation.item_variation_data?.image_ids || []) add(id);
+  }
+
+  return ids;
+}
+
+export function legacyEcomImageUrls(item) {
+  const raw = item.item_data?.ecom_image_uris;
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw.filter(Boolean);
+  if (typeof raw === 'string') {
+    return raw.split(',').map(s => s.trim()).filter(Boolean);
+  }
+  return [];
 }

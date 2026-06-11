@@ -29,5 +29,15 @@ export const config = {
   onlyAnnounceActiveItems: bool('ONLY_ANNOUNCE_ACTIVE_ITEMS', true),
   syncLookbackSeconds: Number(process.env.SYNC_LOOKBACK_SECONDS || 5),
   stateDir: process.env.STATE_DIR?.trim() || 'data',
-  adminToken: process.env.ADMIN_TOKEN?.trim() || ''
+  adminToken: process.env.ADMIN_TOKEN?.trim() || '',
+
+  // Discord item display options.
+  showItemImage: bool('SHOW_ITEM_IMAGE', true),
+
+  // Square may return item_data.ecom_uri for some Online items, but that field is deprecated.
+  // If no item-level URL is available, use one of these optional fallbacks.
+  // STORE_SEARCH_URL example: https://lctcg.com/s/search
+  // STORE_FALLBACK_URL example: https://lctcg.com/s/shop
+  storeSearchUrl: process.env.STORE_SEARCH_URL?.trim() || '',
+  storeFallbackUrl: process.env.STORE_FALLBACK_URL?.trim() || ''
 };

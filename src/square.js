@@ -1,4 +1,5 @@
 import { config } from './config.js';
+import { itemImageIds, legacyEcomImageUrls } from './catalogLogic.js';
 
 const BASE_URL = config.squareEnvironment === 'sandbox'
   ? 'https://connect.squareupsandbox.com'
@@ -45,8 +46,8 @@ export async function listCatalogObjects(types, extraBody = {}) {
   return objects;
 }
 
-export async function retrieveCatalogObject(id) {
-  const result = await squareFetch(`/v2/catalog/object/${encodeURIComponent(id)}?include_related_objects=false`, {
+export async function retrieveCatalogObject(id, includeRelatedObjects = false) {
+  const result = await squareFetch(`/v2/catalog/object/${encodeURIComponent(id)}?include_related_objects=${includeRelatedObjects ? 'true' : 'false'}`, {
     method: 'GET'
   });
   return result.object;
@@ -98,4 +99,24 @@ export async function getChangedItemCandidates(beginTime) {
 
 export async function getAllCurrentItems() {
   return await listCatalogObjects(['ITEM']);
+}
+
+export async function getFirstItemImageUrl(item) {
+  const imageIds = itemImageIds(item);
+
+  for (const imageId of imageIds) {
+    try {
+      const image = await retrieveCatalogObject(imageId);
+      const url = image?.image_data?.url;
+      if (url) return url;
+    } catch (error) {
+      console.warn(`Could not retrieve Square image ${imageId}: ${error.message}`);
+    }
+  }
+
+  // Older Square Online catalogs may expose these legacy image URLs.
+  const legacyUrls = legacyEcomImageUrls(item);
+  if (legacyUrls.length) return legacyUrls[0];
+
+  return null;
 }
