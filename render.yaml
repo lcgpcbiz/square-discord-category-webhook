@@ -1,0 +1,45 @@
+services:
+  - type: web
+    name: square-discord-category-webhook
+    runtime: node
+    plan: starter
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: SQUARE_ENVIRONMENT
+        value: production
+      - key: SQUARE_API_VERSION
+        value: 2026-05-20
+      - key: CATEGORY_NAME
+        value: Singles
+      - key: ANNOUNCE_ADDS
+        value: true
+      - key: ANNOUNCE_UPDATES
+        value: true
+      - key: ONLY_ANNOUNCE_ACTIVE_ITEMS
+        value: true
+      - key: SYNC_LOOKBACK_SECONDS
+        value: 5
+      - key: STATE_DIR
+        value: /var/data
+      - key: PUBLIC_WEBHOOK_URL
+        sync: false
+      - key: SQUARE_ACCESS_TOKEN
+        sync: false
+      - key: SQUARE_SIGNATURE_KEY
+        sync: false
+      - key: DISCORD_WEBHOOK_URL
+        sync: false
+      - key: ADMIN_TOKEN
+        sync: false
+      - key: CATEGORY_ID
+        sync: false
+      - key: ROLE_MENTION_ID
+        sync: false
+    disk:
+      name: square-discord-state
+      mountPath: /var/data
+      sizeGB: 1
