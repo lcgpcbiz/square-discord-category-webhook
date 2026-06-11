@@ -127,15 +127,25 @@ export async function syncInventoryCountEvent(event) {
       continue;
     }
 
-    const previousSnapshot = state.items[item.id] || itemSnapshot(item, true, {});
-    const previousInventory = previousSnapshot.inventoryCounts || {};
+    const previousSnapshot = state.items[item.id] || null;
+    const isNewItemToState = !previousSnapshot;
+    const previousInventory = previousSnapshot?.inventoryCounts || {};
     const previousTotal = totalQuantityForVariation(previousInventory, variationId);
     const nextInventory = applyInventoryCount(previousInventory, count);
     const nextTotal = totalQuantityForVariation(nextInventory, variationId);
 
     state.items[item.id] = itemSnapshot(item, true, nextInventory);
 
-    // First time seeing this variation/location after a fresh deploy or missing seed: record it, don't spam.
+    // New items can arrive as inventory.count.updated before catalog.version.updated.
+    // When that happens, announce it as a new item instead of silently recording it.
+    // This assumes /admin/seed was run after deployment so existing items are already in state.
+    if (isNewItemToState && config.announceAdds) {
+      await postDiscordItemNotice(item, 'added');
+      announced++;
+      continue;
+    }
+
+    // First time seeing this variation/location on an existing item: record it, don't spam.
     if (previousTotal === null || previousTotal === undefined) {
       continue;
     }

@@ -145,3 +145,8 @@ Treat these like passwords:
 - Admin token
 
 Never put them in GitHub.
+
+
+### New item + inventory race condition note
+
+Square can sometimes send `inventory.count.updated` for a newly-created item before the delayed catalog sync finishes. This version treats an inventory event for an item that is not yet in the saved state as a new item announcement, then records its inventory. Run `/admin/seed` after deployment so existing items are already known and only truly new items are announced this way.
