@@ -1,109 +1,147 @@
-# Square Catalog Category → Discord Webhook
+# Square Catalog + Inventory → Discord Webhook
 
-This starter app watches Square catalog changes and posts to a Discord channel when an item is added or updated in a configured Square category, such as `Singles`.
+This app watches a Square catalog category, such as `TCG Singles`, and posts to Discord when:
 
-## What it does
+- a new item is added to the watched category
+- inventory quantity changes for an item variation in that category
+- inventory drops to 0, which posts as a red `SOLD OUT` embed
 
-Square sends a `catalog.version.updated` webhook when any catalog object changes. That webhook does not include the specific item that changed. This app receives the webhook, verifies Square's signature, asks Square which items or item variations changed since the last sync, filters them by category, compares them to local state, and posts the relevant notices to Discord.
+Existing catalog edits such as price changes are ignored by default.
 
-## Requirements
+## Important limitation about item links
 
-- Node.js 18+
-- A public HTTPS URL for this app, such as Render, Railway, Fly.io, a VPS, or ngrok for testing
-- Square Developer access token
-- Square webhook signature key
-- Discord incoming webhook URL
+Square can sometimes return `item_data.ecom_uri` for a Square Online item, but Square marks that field as deprecated and it is often missing. Because of that, this app defaults to `LINK_MODE=direct_only`, which means it only posts a direct item link when Square gives one. It will not invent a broken search URL by default.
 
-## Setup
+If you later find a reliable URL pattern for your storefront, you can use `LINK_MODE=template` and `STORE_ITEM_URL_TEMPLATE`.
 
-1. Install dependencies:
+## Required Square webhook events
 
-```bash
-npm install
-```
+Subscribe the same Square webhook endpoint to both events:
 
-2. Create your environment file:
+- `catalog.version.updated`
+- `inventory.count.updated`
 
-```bash
-cp .env.example .env
-```
-
-3. Fill out `.env`.
-
-Important: `PUBLIC_WEBHOOK_URL` must exactly match the URL you enter in Square Developer Console, including `/square-webhook`.
-
-4. Test Discord:
-
-```bash
-npm run test-discord
-```
-
-5. Seed current Square catalog state so existing items do not all post to Discord:
-
-```bash
-npm run seed
-```
-
-6. Start the server:
-
-```bash
-npm start
-```
-
-7. In Square Developer Console, create a webhook subscription:
-
-- Environment: Production, unless testing sandbox
-- URL: `https://your-domain.com/square-webhook`
-- Event: `catalog.version.updated`
-- Copy the signature key into `.env`
-
-8. Create or update an item in the watched Square category and confirm Discord receives the notice.
-
-## Notes
-
-- Use `CATEGORY_ID` if possible. Category names can change; IDs are stable.
-- If `CATEGORY_ID` is blank, the app tries to find the category by exact `CATEGORY_NAME` match.
-- `ANNOUNCE_ADDS` and `ANNOUNCE_UPDATES` can be set to `true` or `false`.
-- `ROLE_MENTION_ID` can be used to ping a Discord role.
-- `SHOW_ITEM_IMAGE=true` adds the first Square item image to the Discord embed when the item has an attached catalog image.
-- Item links use Square `item_data.ecom_uri` when Square returns it. Because Square marks that field as deprecated, set `STORE_SEARCH_URL` or `STORE_FALLBACK_URL` as a fallback.
-
-## Security
-
-Do not expose your Square access token, Square signature key, or Discord webhook URL publicly. Treat a Discord webhook URL like a password because anyone with it can post to that Discord channel.
-
-
-## Render deployment notes
-
-The app stores sync state in `state.json` so it knows which Square items are new versus already-existing. On Render, set `STATE_DIR=/var/data` and attach a persistent disk mounted at `/var/data`. Without persistent storage, the app can forget its state after a redeploy/restart and may repost existing items.
-
-A `render.yaml` file is included for Blueprint-style deployment. You still need to set the secret environment variables in the Render dashboard:
-
-- `PUBLIC_WEBHOOK_URL`
-- `SQUARE_ACCESS_TOKEN`
-- `SQUARE_SIGNATURE_KEY`
-- `DISCORD_WEBHOOK_URL`
-- `ADMIN_TOKEN`
-- optionally `CATEGORY_ID`, `ROLE_MENTION_ID`, `SHOW_ITEM_IMAGE`, `STORE_SEARCH_URL`, and `STORE_FALLBACK_URL`
-
-After deployment, seed the catalog state once by making a protected POST request:
-
-```bash
-curl -X POST https://YOUR-RENDER-SERVICE.onrender.com/admin/seed \
-  -H "Authorization: Bearer YOUR_ADMIN_TOKEN"
-```
-
-You can test Discord with:
-
-```bash
-curl -X POST https://YOUR-RENDER-SERVICE.onrender.com/admin/test-discord \
-  -H "Authorization: Bearer YOUR_ADMIN_TOKEN"
-```
-
-Your Square webhook URL should be:
+The webhook URL should be:
 
 ```text
 https://YOUR-RENDER-SERVICE.onrender.com/square-webhook
 ```
 
 That exact URL must also be saved as `PUBLIC_WEBHOOK_URL` in Render.
+
+## Required Square API access
+
+The app needs:
+
+- Catalog/item read access for catalog changes
+- Inventory read access for quantity updates
+
+## Required Render environment variables
+
+Do not commit these secrets to GitHub. Set them in Render:
+
+```env
+PUBLIC_WEBHOOK_URL=https://YOUR-RENDER-SERVICE.onrender.com/square-webhook
+SQUARE_ENVIRONMENT=production
+SQUARE_ACCESS_TOKEN=YOUR_SQUARE_PRODUCTION_ACCESS_TOKEN
+SQUARE_SIGNATURE_KEY=YOUR_SQUARE_WEBHOOK_SIGNATURE_KEY
+SQUARE_API_VERSION=2026-05-20
+CATEGORY_NAME=TCG Singles
+CATEGORY_ID=
+DISCORD_WEBHOOK_URL=YOUR_DISCORD_WEBHOOK_URL
+ADMIN_TOKEN=MAKE_THIS_LONG_AND_RANDOM
+STATE_DIR=/var/data
+```
+
+Recommended behavior settings:
+
+```env
+ANNOUNCE_ADDS=true
+ANNOUNCE_CATALOG_UPDATES=false
+ANNOUNCE_UPDATES=false
+ANNOUNCE_QUANTITY_UPDATES=true
+ANNOUNCE_SOLD_OUT=true
+INVENTORY_STATE=IN_STOCK
+SHOW_ITEM_IMAGE=true
+LINK_MODE=direct_only
+```
+
+Optional link settings:
+
+```env
+# Recommended if Square direct links are missing and you do not want any item link:
+LINK_MODE=none
+
+# Use your general store/category URL if no Square direct URL exists:
+LINK_MODE=fallback
+STORE_FALLBACK_URL=https://lctcg.com
+
+# Use a search page only if your storefront actually honors ?q= search terms:
+LINK_MODE=search
+STORE_SEARCH_URL=https://lctcg.com/s/search
+
+# Use this only if you discover a reliable item URL pattern:
+LINK_MODE=template
+STORE_ITEM_URL_TEMPLATE=https://example.com/product/{slug}
+```
+
+## Setup
+
+Install dependencies:
+
+```bash
+npm install
+```
+
+Test Discord:
+
+```bash
+npm run test-discord
+```
+
+Seed current catalog and inventory state so existing items and existing quantities do not all post as new:
+
+```bash
+npm run seed
+```
+
+Start the server:
+
+```bash
+npm start
+```
+
+## Render deployment
+
+This app stores sync state in `state.json`. On Render, set `STATE_DIR=/var/data` and attach a persistent disk mounted at `/var/data`. Without persistent storage, the app can forget state after a redeploy/restart.
+
+A `render.yaml` file is included. After deploy, run:
+
+```bash
+curl -X POST https://YOUR-RENDER-SERVICE.onrender.com/admin/test-discord \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN"
+```
+
+Then seed:
+
+```bash
+curl -X POST https://YOUR-RENDER-SERVICE.onrender.com/admin/seed \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN"
+```
+
+## How sold-out messages work
+
+The app listens for Square `inventory.count.updated` events. It tracks previous quantity in local state. If a variation goes from above 0 to 0, it posts a red Discord embed with `🔴 SOLD OUT`.
+
+Discord does not support coloring individual words red in normal text, but embed sidebars can be red. This app uses a red embed color plus the red circle emoji for sold-out alerts.
+
+## Security
+
+Treat these like passwords:
+
+- Square access token
+- Square webhook signature key
+- Discord webhook URL
+- Admin token
+
+Never put them in GitHub.

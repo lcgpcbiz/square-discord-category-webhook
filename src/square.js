@@ -1,5 +1,5 @@
 import { config } from './config.js';
-import { itemImageIds, legacyEcomImageUrls } from './catalogLogic.js';
+import { itemImageIds, legacyEcomImageUrls, variationIds } from './catalogLogic.js';
 
 const BASE_URL = config.squareEnvironment === 'sandbox'
   ? 'https://connect.squareupsandbox.com'
@@ -99,6 +99,48 @@ export async function getChangedItemCandidates(beginTime) {
 
 export async function getAllCurrentItems() {
   return await listCatalogObjects(['ITEM']);
+}
+
+export async function retrieveVariationAndParentItem(variationId) {
+  const variation = await retrieveCatalogObject(variationId);
+  if (variation?.type !== 'ITEM_VARIATION') {
+    throw new Error(`Catalog object ${variationId} is not an ITEM_VARIATION.`);
+  }
+  const itemId = variation.item_variation_data?.item_id;
+  if (!itemId) throw new Error(`Variation ${variationId} did not include an item_id.`);
+  const item = await retrieveCatalogObject(itemId);
+  if (item?.type !== 'ITEM') throw new Error(`Parent object ${itemId} is not an ITEM.`);
+  return { variation, item };
+}
+
+export async function getInventoryCountsForVariationIds(ids) {
+  const allCounts = [];
+  const uniqueIds = [...new Set(ids.filter(Boolean))];
+  const chunkSize = 100;
+
+  for (let i = 0; i < uniqueIds.length; i += chunkSize) {
+    const chunk = uniqueIds.slice(i, i + chunkSize);
+    let cursor;
+    do {
+      const body = {
+        catalog_object_ids: chunk,
+        states: [config.inventoryState],
+        ...(cursor ? { cursor } : {})
+      };
+      const result = await squareFetch('/v2/inventory/counts/batch-retrieve', {
+        method: 'POST',
+        body: JSON.stringify(body)
+      });
+      allCounts.push(...(result.counts || []));
+      cursor = result.cursor;
+    } while (cursor);
+  }
+
+  return allCounts;
+}
+
+export async function getInventoryCountsForItem(item) {
+  return await getInventoryCountsForVariationIds(variationIds(item));
 }
 
 export async function getFirstItemImageUrl(item) {

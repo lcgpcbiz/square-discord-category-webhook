@@ -1,7 +1,7 @@
 {
   "name": "square-discord-category-webhook",
-  "version": "1.0.0",
-  "description": "Notify a Discord channel when Square catalog items are added or updated in a watched category.",
+  "version": "1.1.0",
+  "description": "Notify a Discord channel when Square catalog items are added or inventory quantities change in a watched category.",
   "type": "module",
   "main": "src/server.js",
   "scripts": {

@@ -26,7 +26,13 @@ export function itemIsActive(item) {
   return true;
 }
 
-export function itemSnapshot(item, inWatchedCategory) {
+export function variationIds(item) {
+  return (item.item_data?.variations || [])
+    .map(v => v.id)
+    .filter(Boolean);
+}
+
+export function itemSnapshot(item, inWatchedCategory, inventoryCounts = {}) {
   const variations = item.item_data?.variations || [];
   const variationVersions = {};
   for (const variation of variations) {
@@ -39,6 +45,7 @@ export function itemSnapshot(item, inWatchedCategory) {
     version: item.version || null,
     inWatchedCategory,
     variationVersions,
+    inventoryCounts,
     updatedAt: item.updated_at || new Date().toISOString()
   };
 }
@@ -80,24 +87,46 @@ export function skuText(item) {
   return skus.slice(0, 4).join(', ') + (skus.length > 4 ? `, +${skus.length - 4} more` : '');
 }
 
-export function itemUrl(item) {
+export function slugify(text) {
+  return String(text || '')
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'item';
+}
+
+export function itemUrl(item, variation = null) {
+  if (config.linkMode === 'none') return null;
+
   const data = item.item_data || {};
 
   // Square has historically returned ecom_uri for published Square Online products,
-  // but Square marks it as deprecated. Use it when present, then fall back below.
+  // but Square marks it as deprecated and it is often missing. Use it only when present.
   if (data.ecom_uri) return data.ecom_uri;
   if (data.external_url) return data.external_url;
 
-  // If you provide a search page URL, link to a search for the item name.
-  // Example: STORE_SEARCH_URL=https://lctcg.com/s/search
-  if (config.storeSearchUrl) {
-    const separator = config.storeSearchUrl.includes('?') ? '&' : '?';
-    const name = data.name || '';
-    return `${config.storeSearchUrl}${separator}q=${encodeURIComponent(name)}`;
+  const itemName = data.name || '';
+  const variationName = variation?.item_variation_data?.name || '';
+
+  if (config.linkMode === 'template' && config.storeItemUrlTemplate) {
+    return config.storeItemUrlTemplate
+      .replaceAll('{item_id}', encodeURIComponent(item.id || ''))
+      .replaceAll('{variation_id}', encodeURIComponent(variation?.id || ''))
+      .replaceAll('{name}', encodeURIComponent(itemName))
+      .replaceAll('{slug}', encodeURIComponent(slugify(itemName)))
+      .replaceAll('{variation_name}', encodeURIComponent(variationName))
+      .replaceAll('{variation_slug}', encodeURIComponent(slugify(variationName)));
   }
 
-  // Last resort: link to your store/category page.
-  if (config.storeFallbackUrl) return config.storeFallbackUrl;
+  if (config.linkMode === 'search' && config.storeSearchUrl) {
+    const separator = config.storeSearchUrl.includes('?') ? '&' : '?';
+    return `${config.storeSearchUrl}${separator}q=${encodeURIComponent(itemName)}`;
+  }
+
+  if (config.linkMode === 'fallback' && config.storeFallbackUrl) {
+    return config.storeFallbackUrl;
+  }
 
   return null;
 }
@@ -129,4 +158,60 @@ export function legacyEcomImageUrls(item) {
     return raw.split(',').map(s => s.trim()).filter(Boolean);
   }
   return [];
+}
+
+export function inventoryKey(count) {
+  return [count.catalog_object_id, count.location_id || 'unknown', count.state || config.inventoryState].join('|');
+}
+
+export function parseQuantity(quantity) {
+  const value = Number(quantity ?? 0);
+  return Number.isFinite(value) ? value : 0;
+}
+
+export function countsToInventoryMap(counts = []) {
+  const map = {};
+  for (const count of counts) {
+    if (!count?.catalog_object_id) continue;
+    const key = inventoryKey(count);
+    map[key] = {
+      variationId: count.catalog_object_id,
+      locationId: count.location_id || '',
+      state: count.state || config.inventoryState,
+      quantity: parseQuantity(count.quantity),
+      calculatedAt: count.calculated_at || new Date().toISOString()
+    };
+  }
+  return map;
+}
+
+export function applyInventoryCount(inventoryCounts = {}, count) {
+  const next = { ...inventoryCounts };
+  const key = inventoryKey(count);
+  next[key] = {
+    variationId: count.catalog_object_id,
+    locationId: count.location_id || '',
+    state: count.state || config.inventoryState,
+    quantity: parseQuantity(count.quantity),
+    calculatedAt: count.calculated_at || new Date().toISOString()
+  };
+  return next;
+}
+
+export function totalQuantityForVariation(inventoryCounts = {}, variationId) {
+  let total = 0;
+  let seen = false;
+  for (const entry of Object.values(inventoryCounts || {})) {
+    if (entry?.variationId === variationId && entry?.state === config.inventoryState) {
+      total += parseQuantity(entry.quantity);
+      seen = true;
+    }
+  }
+  return seen ? total : null;
+}
+
+export function variationName(item, variationId) {
+  const variation = (item.item_data?.variations || []).find(v => v.id === variationId);
+  const name = variation?.item_variation_data?.name;
+  return name && name !== 'Regular' ? name : '';
 }

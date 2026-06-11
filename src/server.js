@@ -1,13 +1,13 @@
 import express from 'express';
 import { config } from './config.js';
 import { verifySquareSignature } from './verifySquare.js';
-import { syncChangedCatalogObjects } from './sync.js';
+import { syncChangedCatalogObjects, syncInventoryCountEvent } from './sync.js';
 import { postDiscord } from './discord.js';
 import { seedCurrentCatalogState } from './seedCatalog.js';
 
 const app = express();
-let syncInProgress = false;
-let syncAgainAfterCurrent = false;
+let catalogSyncInProgress = false;
+let catalogSyncAgainAfterCurrent = false;
 
 app.get('/health', (_req, res) => {
   res.json({ ok: true, service: 'square-discord-category-webhook' });
@@ -20,7 +20,6 @@ function requireAdmin(req, res, next) {
   if (token !== config.adminToken) return res.status(401).send('Unauthorized');
   next();
 }
-
 
 app.post('/square-webhook', express.raw({ type: '*/*' }), async (req, res) => {
   const signature = req.header('x-square-hmacsha256-signature');
@@ -38,15 +37,21 @@ app.post('/square-webhook', express.raw({ type: '*/*' }), async (req, res) => {
     return res.status(400).send('Invalid JSON');
   }
 
-  if (event.type !== 'catalog.version.updated') {
-    return res.status(200).send('Ignored event type');
-  }
-
   // Square wants a fast 2xx. Process after acknowledging.
   res.status(200).send('Accepted');
 
-  const updatedAt = event.data?.object?.catalog_version?.updated_at || event.created_at || new Date().toISOString();
-  queueSync(updatedAt);
+  if (event.type === 'catalog.version.updated') {
+    const updatedAt = event.data?.object?.catalog_version?.updated_at || event.created_at || new Date().toISOString();
+    queueCatalogSync(updatedAt);
+    return;
+  }
+
+  if (event.type === 'inventory.count.updated') {
+    queueInventorySync(event);
+    return;
+  }
+
+  console.log(`Ignored Square event type: ${event.type}`);
 });
 
 app.post('/admin/test-discord', express.json(), requireAdmin, async (_req, res) => {
@@ -59,31 +64,43 @@ app.post('/admin/seed', express.json(), requireAdmin, async (_req, res) => {
   res.json({ ok: true, ...result });
 });
 
-function queueSync(updatedAt) {
-  if (syncInProgress) {
-    syncAgainAfterCurrent = updatedAt;
+function queueCatalogSync(updatedAt) {
+  if (catalogSyncInProgress) {
+    catalogSyncAgainAfterCurrent = updatedAt;
     return;
   }
 
-  syncInProgress = true;
+  catalogSyncInProgress = true;
   setTimeout(async () => {
     try {
       const result = await syncChangedCatalogObjects(updatedAt);
-      console.log('Sync complete:', result);
+      console.log('Catalog sync complete:', result);
     } catch (error) {
-      console.error('Sync failed:', error);
+      console.error('Catalog sync failed:', error);
     } finally {
-      syncInProgress = false;
-      if (syncAgainAfterCurrent) {
-        const next = syncAgainAfterCurrent;
-        syncAgainAfterCurrent = false;
-        queueSync(next);
+      catalogSyncInProgress = false;
+      if (catalogSyncAgainAfterCurrent) {
+        const next = catalogSyncAgainAfterCurrent;
+        catalogSyncAgainAfterCurrent = false;
+        queueCatalogSync(next);
       }
     }
   }, 1500);
 }
 
+function queueInventorySync(event) {
+  setTimeout(async () => {
+    try {
+      const result = await syncInventoryCountEvent(event);
+      console.log('Inventory sync complete:', result);
+    } catch (error) {
+      console.error('Inventory sync failed:', error);
+    }
+  }, 250);
+}
+
 app.listen(config.port, () => {
   console.log(`Listening on port ${config.port}`);
   console.log(`Square webhook endpoint: ${config.publicWebhookUrl}`);
+  console.log('Listening for Square events: catalog.version.updated, inventory.count.updated');
 });

@@ -14,15 +14,25 @@ services:
       - key: SQUARE_API_VERSION
         value: 2026-05-20
       - key: CATEGORY_NAME
-        value: Singles
+        value: TCG Singles
       - key: ANNOUNCE_ADDS
         value: true
+      - key: ANNOUNCE_CATALOG_UPDATES
+        value: false
       - key: ANNOUNCE_UPDATES
+        value: false
+      - key: ANNOUNCE_QUANTITY_UPDATES
         value: true
+      - key: ANNOUNCE_SOLD_OUT
+        value: true
+      - key: INVENTORY_STATE
+        value: IN_STOCK
       - key: ONLY_ANNOUNCE_ACTIVE_ITEMS
         value: true
       - key: SHOW_ITEM_IMAGE
         value: true
+      - key: LINK_MODE
+        value: direct_only
       - key: SYNC_LOOKBACK_SECONDS
         value: 5
       - key: STATE_DIR
