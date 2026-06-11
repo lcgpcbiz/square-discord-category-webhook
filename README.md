@@ -8,11 +8,26 @@ This app watches a Square catalog category, such as `TCG Singles`, and posts to 
 
 Existing catalog edits such as price changes are ignored by default.
 
-## Important limitation about item links
+## Item/category link behavior
 
-Square can sometimes return `item_data.ecom_uri` for a Square Online item, but Square marks that field as deprecated and it is often missing. Because of that, this app defaults to `LINK_MODE=direct_only`, which means it only posts a direct item link when Square gives one. It will not invent a broken search URL by default.
+For Lucky Cat singles, the app now prefers category links instead of unreliable item/search links. Each item should be assigned to `TCG Singles` plus one card-game category, such as `Pokemon Singles` or `MTG Singles`. The bot detects that second category and links the Discord embed to that game's Square Online category page.
 
-If you later find a reliable URL pattern for your storefront, you can use `LINK_MODE=template` and `STORE_ITEM_URL_TEMPLATE`.
+The category IDs are built into the app:
+
+- `MTG Singles`: `5UWL64AV6MEABQ6RCR6QIB73`
+- `Pokemon Singles`: `WUMBDVIADGF5EUH457RAUOIM`
+- `One Piece Singles`: `YVVUAAUSMJEUX6JD6QJWCWLS`
+- `Riftbound Singles`: `YQP7QDXR5TYQG6FNOEK7Q5EU`
+- `Lorcana Singles`: `IVTG2K5BVS6YTYYGFE5L5SEI`
+- `Gundam Singles`: `VZBIESUN4MY5CA4R2QZK7LNH`
+
+Default category URL pattern:
+
+```env
+STORE_CATEGORY_URL_TEMPLATE=https://lctcg.com/s/shop?category_ids={category_id}
+```
+
+If Square Online uses a different public URL for your category pages, change `STORE_CATEGORY_URL_TEMPLATE` in Render or provide exact category URLs with `SUBCATEGORY_LINKS_JSON`.
 
 ## Required Square webhook events
 
@@ -63,26 +78,27 @@ ANNOUNCE_QUANTITY_UPDATES=true
 ANNOUNCE_SOLD_OUT=true
 INVENTORY_STATE=IN_STOCK
 SHOW_ITEM_IMAGE=true
-LINK_MODE=direct_only
+LINK_MODE=category
+STORE_BASE_URL=https://lctcg.com
+STORE_CATEGORY_URL_TEMPLATE=https://lctcg.com/s/shop?category_ids={category_id}
 ```
 
 Optional link settings:
 
 ```env
-# Recommended if Square direct links are missing and you do not want any item link:
+# Recommended Lucky Cat behavior: category links by card game.
+LINK_MODE=category
+STORE_BASE_URL=https://lctcg.com
+STORE_CATEGORY_URL_TEMPLATE=https://lctcg.com/s/shop?category_ids={category_id}
+
+# If you copy exact public category URLs from your Square site navigation, you can override the built-in map.
+SUBCATEGORY_LINKS_JSON=[{"id":"WUMBDVIADGF5EUH457RAUOIM","name":"Pokemon Singles","url":"https://lctcg.com/your-pokemon-category-url"}]
+
+# Use Square's direct item URL first if Square provides one, otherwise category.
+LINK_MODE=direct_then_category
+
+# Never include links.
 LINK_MODE=none
-
-# Use your general store/category URL if no Square direct URL exists:
-LINK_MODE=fallback
-STORE_FALLBACK_URL=https://lctcg.com
-
-# Use a search page only if your storefront actually honors ?q= search terms:
-LINK_MODE=search
-STORE_SEARCH_URL=https://lctcg.com/s/search
-
-# Use this only if you discover a reliable item URL pattern:
-LINK_MODE=template
-STORE_ITEM_URL_TEMPLATE=https://example.com/product/{slug}
 ```
 
 ## Setup

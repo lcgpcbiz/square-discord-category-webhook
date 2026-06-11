@@ -1,5 +1,5 @@
 import { config } from './config.js';
-import { cheapestPriceText, itemUrl, skuText, variationName } from './catalogLogic.js';
+import { cheapestPriceText, itemSubcategory, itemSubcategoryUrl, itemUrl, skuText, variationName } from './catalogLogic.js';
 import { getFirstItemImageUrl } from './square.js';
 
 function discordColor(action) {
@@ -27,14 +27,21 @@ export async function postDiscordItemNotice(item, action, options = {}) {
   const name = item.item_data?.name || '(Unnamed Square item)';
   const variation = options.variation || null;
   const url = itemUrl(item, variation);
+  const subcategory = itemSubcategory(item);
+  const subcategoryUrl = itemSubcategoryUrl(item);
   const imageUrl = config.showItemImage ? await getFirstItemImageUrl(item) : null;
   const roleMention = config.roleMentionId ? `<@&${config.roleMentionId}> ` : '';
 
   const fields = [
     { name: 'Category', value: config.categoryName, inline: true },
+    { name: 'Card game', value: subcategory?.name || 'Not detected', inline: true },
     { name: 'Starting price', value: cheapestPriceText(item), inline: true },
     { name: 'SKU', value: skuText(item), inline: false }
   ];
+
+  if (subcategory && subcategoryUrl) {
+    fields.splice(2, 0, { name: 'Shop category', value: `[${subcategory.name}](${subcategoryUrl})`, inline: false });
+  }
 
   if (options.quantityText) {
     fields.unshift({ name: 'Quantity', value: options.quantityText, inline: true });
@@ -48,7 +55,7 @@ export async function postDiscordItemNotice(item, action, options = {}) {
   const embed = {
     title: actionTitle(action, config.categoryName),
     url: url || undefined,
-    description: url ? `[View item](${url})` : name,
+    description: url ? `[Shop ${subcategory?.name || 'this category'}](${url})` : name,
     color: discordColor(action),
     fields,
     footer: { text: 'Lucky Cat Square Store' },

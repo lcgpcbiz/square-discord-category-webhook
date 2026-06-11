@@ -96,15 +96,76 @@ export function slugify(text) {
     .replace(/^-+|-+$/g, '') || 'item';
 }
 
+function subcategoryLinks() {
+  if (config.subcategoryLinksJson) {
+    try {
+      const parsed = JSON.parse(config.subcategoryLinksJson);
+      if (Array.isArray(parsed)) {
+        return parsed
+          .map(entry => ({
+            id: String(entry.id || '').trim(),
+            name: String(entry.name || '').trim(),
+            url: String(entry.url || '').trim()
+          }))
+          .filter(entry => entry.id && entry.name);
+      }
+    } catch (error) {
+      console.warn(`Invalid SUBCATEGORY_LINKS_JSON. Falling back to default subcategory links. ${error.message}`);
+    }
+  }
+
+  return config.defaultSubcategoryLinks || [];
+}
+
+export function itemSubcategory(item) {
+  const ids = itemCategoryIds(item);
+
+  for (const link of subcategoryLinks()) {
+    if (ids.has(link.id)) return link;
+  }
+
+  return null;
+}
+
+export function categoryUrl(categoryLink) {
+  if (!categoryLink) return null;
+  if (categoryLink.url) return categoryLink.url;
+
+  const template = config.storeCategoryUrlTemplate || '';
+  if (template) {
+    return template
+      .replaceAll('{category_id}', encodeURIComponent(categoryLink.id || ''))
+      .replaceAll('{category_name}', encodeURIComponent(categoryLink.name || ''))
+      .replaceAll('{category_slug}', encodeURIComponent(slugify(categoryLink.name || '')));
+  }
+
+  const base = (config.storeBaseUrl || config.storeFallbackUrl || '').replace(/\/$/, '');
+  if (!base) return null;
+  return `${base}/s/shop?category_ids=${encodeURIComponent(categoryLink.id)}`;
+}
+
+export function itemSubcategoryUrl(item) {
+  return categoryUrl(itemSubcategory(item));
+}
+
 export function itemUrl(item, variation = null) {
   if (config.linkMode === 'none') return null;
 
   const data = item.item_data || {};
+  const directUrl = data.ecom_uri || data.external_url || null;
+  const subcategoryUrl = itemSubcategoryUrl(item);
 
-  // Square has historically returned ecom_uri for published Square Online products,
-  // but Square marks it as deprecated and it is often missing. Use it only when present.
-  if (data.ecom_uri) return data.ecom_uri;
-  if (data.external_url) return data.external_url;
+  if (config.linkMode === 'category') {
+    return subcategoryUrl || directUrl || null;
+  }
+
+  if (config.linkMode === 'direct_then_category') {
+    return directUrl || subcategoryUrl || null;
+  }
+
+  if (config.linkMode === 'direct_only') {
+    return directUrl || null;
+  }
 
   const itemName = data.name || '';
   const variationName = variation?.item_variation_data?.name || '';
@@ -128,7 +189,7 @@ export function itemUrl(item, variation = null) {
     return config.storeFallbackUrl;
   }
 
-  return null;
+  return directUrl || subcategoryUrl || null;
 }
 
 export function itemImageIds(item) {
