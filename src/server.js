@@ -8,6 +8,7 @@ import { seedCurrentCatalogState } from './seedCatalog.js';
 const app = express();
 let catalogSyncInProgress = false;
 let catalogSyncAgainAfterCurrent = false;
+let inventorySyncChain = Promise.resolve();
 
 app.get('/health', (_req, res) => {
   res.json({ ok: true, service: 'square-discord-category-webhook' });
@@ -89,14 +90,17 @@ function queueCatalogSync(updatedAt) {
 }
 
 function queueInventorySync(event) {
-  setTimeout(async () => {
-    try {
+  // Inventory updates for the same item/variation can arrive in bursts.
+  // Serialize them so two webhooks cannot load the same old state and overwrite each other.
+  inventorySyncChain = inventorySyncChain
+    .then(() => new Promise(resolve => setTimeout(resolve, 250)))
+    .then(async () => {
       const result = await syncInventoryCountEvent(event);
       console.log('Inventory sync complete:', result);
-    } catch (error) {
+    })
+    .catch(error => {
       console.error('Inventory sync failed:', error);
-    }
-  }, 250);
+    });
 }
 
 app.listen(config.port, () => {

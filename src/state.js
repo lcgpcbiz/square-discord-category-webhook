@@ -11,7 +11,7 @@ export async function loadState() {
     return JSON.parse(raw);
   } catch (error) {
     if (error.code !== 'ENOENT') throw error;
-    return { lastSyncAt: null, items: {} };
+    return { lastSyncAt: null, lastInventoryEventAt: null, items: {}, processedEvents: {} };
   }
 }
 

@@ -9,6 +9,7 @@ import { loadState, saveState, subtractSeconds } from './state.js';
 import {
   applyInventoryCount,
   countsToInventoryMap,
+  inventoryCountIsStale,
   itemIsActive,
   itemIsInCategory,
   itemSnapshot,
@@ -16,6 +17,34 @@ import {
   totalQuantityForVariation
 } from './catalogLogic.js';
 import { postDiscordInventoryNotice, postDiscordItemNotice } from './discord.js';
+
+
+function pruneProcessedEvents(state) {
+  const retentionMs = Math.max(1, config.processedEventRetentionHours) * 60 * 60 * 1000;
+  const cutoff = Date.now() - retentionMs;
+  state.processedEvents ||= {};
+
+  for (const [eventId, seenAt] of Object.entries(state.processedEvents)) {
+    const seenTime = new Date(seenAt).getTime();
+    if (Number.isNaN(seenTime) || seenTime < cutoff) {
+      delete state.processedEvents[eventId];
+    }
+  }
+}
+
+function alreadyProcessedEvent(state, event) {
+  const eventId = event?.event_id || event?.id;
+  if (!eventId) return false;
+  state.processedEvents ||= {};
+  return Boolean(state.processedEvents[eventId]);
+}
+
+function markProcessedEvent(state, event) {
+  const eventId = event?.event_id || event?.id;
+  if (!eventId) return;
+  state.processedEvents ||= {};
+  state.processedEvents[eventId] = event.created_at || new Date().toISOString();
+}
 
 export async function syncChangedCatalogObjects(webhookUpdatedAt = null) {
   const state = await loadState();
@@ -80,12 +109,20 @@ export async function syncChangedCatalogObjects(webhookUpdatedAt = null) {
 
 export async function syncInventoryCountEvent(event) {
   const state = await loadState();
+  pruneProcessedEvents(state);
+
+  if (alreadyProcessedEvent(state, event)) {
+    await saveState(state);
+    return { checked: 0, skipped: 0, announced: 0, duplicate: true, type: 'inventory' };
+  }
+
   const categoryId = await resolveCategoryId();
   const counts = event.data?.object?.inventory_counts || [];
 
   let checked = 0;
   let announced = 0;
   let skipped = 0;
+  let stale = 0;
 
   for (const count of counts) {
     checked++;
@@ -130,6 +167,14 @@ export async function syncInventoryCountEvent(event) {
     const previousSnapshot = state.items[item.id] || null;
     const isNewItemToState = !previousSnapshot;
     const previousInventory = previousSnapshot?.inventoryCounts || {};
+
+    // Square can retry inventory webhooks or deliver older events after newer ones.
+    // Do not let an older count make Discord think an item restocked/sold again.
+    if (!isNewItemToState && config.ignoreStaleInventoryEvents && inventoryCountIsStale(previousInventory, count)) {
+      stale++;
+      continue;
+    }
+
     const previousTotal = totalQuantityForVariation(previousInventory, variationId);
     const nextInventory = applyInventoryCount(previousInventory, count);
     const nextTotal = totalQuantityForVariation(nextInventory, variationId);
@@ -167,7 +212,8 @@ export async function syncInventoryCountEvent(event) {
   }
 
   state.lastInventoryEventAt = event.created_at || new Date().toISOString();
+  markProcessedEvent(state, event);
   await saveState(state);
 
-  return { checked, skipped, announced, categoryId, type: 'inventory' };
+  return { checked, skipped, stale, announced, categoryId, type: 'inventory' };
 }

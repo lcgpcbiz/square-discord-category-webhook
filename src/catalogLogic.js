@@ -246,17 +246,33 @@ export function countsToInventoryMap(counts = []) {
   return map;
 }
 
-export function applyInventoryCount(inventoryCounts = {}, count) {
-  const next = { ...inventoryCounts };
-  const key = inventoryKey(count);
-  next[key] = {
+export function inventoryEntryFromCount(count) {
+  return {
     variationId: count.catalog_object_id,
     locationId: count.location_id || '',
     state: count.state || config.inventoryState,
     quantity: parseQuantity(count.quantity),
     calculatedAt: count.calculated_at || new Date().toISOString()
   };
+}
+
+export function applyInventoryCount(inventoryCounts = {}, count) {
+  const next = { ...inventoryCounts };
+  const key = inventoryKey(count);
+  next[key] = inventoryEntryFromCount(count);
   return next;
+}
+
+export function inventoryCountIsStale(inventoryCounts = {}, count) {
+  const key = inventoryKey(count);
+  const previous = inventoryCounts?.[key];
+  if (!previous?.calculatedAt || !count?.calculated_at) return false;
+
+  const previousTime = new Date(previous.calculatedAt).getTime();
+  const incomingTime = new Date(count.calculated_at).getTime();
+
+  if (Number.isNaN(previousTime) || Number.isNaN(incomingTime)) return false;
+  return incomingTime <= previousTime;
 }
 
 export function totalQuantityForVariation(inventoryCounts = {}, variationId) {

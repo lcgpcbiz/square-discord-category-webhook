@@ -166,3 +166,15 @@ Never put them in GitHub.
 ### New item + inventory race condition note
 
 Square can sometimes send `inventory.count.updated` for a newly-created item before the delayed catalog sync finishes. This version treats an inventory event for an item that is not yet in the saved state as a new item announcement, then records its inventory. Run `/admin/seed` after deployment so existing items are already known and only truly new items are announced this way.
+
+
+## Variation / duplicate inventory event safety
+
+This version serializes inventory webhook processing, remembers processed Square event IDs, and ignores stale inventory count updates when the incoming `calculated_at` timestamp is not newer than the count already saved in state. This prevents repeated back-in-stock / sold-out loops caused by retried or out-of-order Square inventory webhooks, especially on items with multiple variations.
+
+Recommended Render env vars:
+
+```env
+IGNORE_STALE_INVENTORY_EVENTS=true
+PROCESSED_EVENT_RETENTION_HOURS=72
+```

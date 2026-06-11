@@ -37,6 +37,11 @@ export const config = {
   announceSoldOut: bool('ANNOUNCE_SOLD_OUT', true),
   inventoryState: process.env.INVENTORY_STATE?.trim() || 'IN_STOCK',
 
+  // Inventory event safety. Square can retry webhooks and events can arrive out of order.
+  // Keep this true unless you are intentionally replaying old inventory events for debugging.
+  ignoreStaleInventoryEvents: bool('IGNORE_STALE_INVENTORY_EVENTS', true),
+  processedEventRetentionHours: Number(process.env.PROCESSED_EVENT_RETENTION_HOURS || 72),
+
   onlyAnnounceActiveItems: bool('ONLY_ANNOUNCE_ACTIVE_ITEMS', true),
   syncLookbackSeconds: Number(process.env.SYNC_LOOKBACK_SECONDS || 5),
   stateDir: process.env.STATE_DIR?.trim() || 'data',
